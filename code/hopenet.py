@@ -1,8 +1,11 @@
 import torch
 import torch.nn as nn
+import os
 from torch.autograd import Variable
 import math
 import torch.nn.functional as F
+from mobilenetv2 import *
+
 
 class Hopenet(nn.Module):
     # Hopenet with 3 output layers for yaw, pitch and roll
@@ -169,3 +172,159 @@ class AlexNet(nn.Module):
         pitch = self.fc_pitch(x)
         roll = self.fc_roll(x)
         return yaw, pitch, roll
+
+
+class MobileNetInternal(nn.Module):
+    def __init__(self, relu6=True):
+        super(MobileNetInternal, self).__init__()
+
+        def relu(relu6):
+            if relu6:
+                return nn.ReLU6(inplace=True)
+            else:
+                return nn.ReLU(inplace=True)
+
+        def conv_bn(inp, oup, stride, relu6):
+            return nn.Sequential(
+                nn.Conv2d(inp, oup, 3, stride, 1, bias=False),
+                nn.BatchNorm2d(oup),
+                relu(relu6),
+            )
+
+        def conv_dw(inp, oup, stride, relu6):
+            return nn.Sequential(
+                nn.Conv2d(inp, inp, 3, stride, 1, groups=inp, bias=False),
+                nn.BatchNorm2d(inp),
+                relu(relu6),
+
+                nn.Conv2d(inp, oup, 1, 1, 0, bias=False),
+                nn.BatchNorm2d(oup),
+                relu(relu6),
+            )
+
+        self.model = nn.Sequential(
+            conv_bn(3, 32, 2, relu6),
+            conv_dw(32, 64, 1, relu6),
+            conv_dw(64, 128, 2, relu6),
+            conv_dw(128, 128, 1, relu6),
+            conv_dw(128, 256, 2, relu6),
+            conv_dw(256, 256, 1, relu6),
+            conv_dw(256, 512, 2, relu6),
+            conv_dw(512, 512, 1, relu6),
+            conv_dw(512, 512, 1, relu6),
+            conv_dw(512, 512, 1, relu6),
+            conv_dw(512, 512, 1, relu6),
+            conv_dw(512, 512, 1, relu6),
+            conv_dw(512, 1024, 2, relu6),
+            conv_dw(1024, 1024, 1, relu6),
+            nn.AvgPool2d(7),
+        )
+        self.fc = nn.Linear(1024, 1000)
+
+    def forward(self, x):
+        x = self.model(x)
+        x = x.view(-1, 1024)
+        x = self.fc(x)
+        return x
+
+def weights_init(m):
+    # Initialize kernel weights with Gaussian distributions
+    if isinstance(m, nn.Conv2d):
+        n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
+        m.weight.data.normal_(0, math.sqrt(2. / n))
+        if m.bias is not None:
+            m.bias.data.zero_()
+    elif isinstance(m, nn.ConvTranspose2d):
+        n = m.kernel_size[0] * m.kernel_size[1] * m.in_channels
+        m.weight.data.normal_(0, math.sqrt(2. / n))
+        if m.bias is not None:
+            m.bias.data.zero_()
+    elif isinstance(m, nn.BatchNorm2d):
+        m.weight.data.fill_(1)
+        m.bias.data.zero_()
+
+class MobileNet(nn.Module):
+    def __init__(self, num_bins, in_channels=3, pretrained=True):
+
+        super(MobileNet, self).__init__()
+        mobilenet = MobileNetInternal()
+        if pretrained:
+            pretrained_path = os.path.join('imagenet', 'results', 'imagenet.arch=mobilenet.lr=0.1.bs=256', 'model_best.pth.tar')
+            checkpoint = torch.load(pretrained_path)
+            state_dict = checkpoint['state_dict']
+
+            from collections import OrderedDict
+            new_state_dict = OrderedDict()
+            for k, v in state_dict.items():
+                name = k[7:] # remove `module.`
+                new_state_dict[name] = v
+            mobilenet.load_state_dict(new_state_dict)
+        else:
+            mobilenet.apply(weights_init)
+
+        if in_channels == 3:
+            self.mobilenet = nn.Sequential(*(mobilenet.model[i] for i in range(15)))
+        else:
+            def conv_bn(inp, oup, stride):
+                return nn.Sequential(
+                    nn.Conv2d(inp, oup, 3, stride, 1, bias=False),
+                    nn.BatchNorm2d(oup),
+                    nn.ReLU6(inplace=True)
+                )
+
+            self.mobilenet = nn.Sequential(
+                conv_bn(in_channels,  32, 2),
+                *(mobilenet.model[i] for i in range(1,15))
+                )
+
+        self.fc_yaw = nn.Linear(1024, num_bins)
+        self.fc_pitch = nn.Linear(1024, num_bins)
+        self.fc_roll = nn.Linear(1024, num_bins)
+
+
+    def forward(self, x):
+        x = self.mobilenet(x)
+        x = x.view(x.size(0), -1)
+        pre_yaw = self.fc_yaw(x)
+        pre_pitch = self.fc_pitch(x)
+        pre_roll = self.fc_roll(x)
+        return pre_yaw, pre_pitch, pre_roll
+
+
+class MobileNet2(nn.Module):
+    def __init__(self, num_bins, in_channels=3, pretrained=True):
+
+        super(MobileNet2, self).__init__()
+        mobilenet2 = MobileNetV2()
+        if pretrained:
+            mobilenet2.load_state_dict(torch.load('/home/songlin/deeplearning/head_pose/mobilenetv2_1.0-0c6065bc.pth'))
+        else:
+            mobilenet2.apply(weights_init)
+
+        if in_channels == 3:
+            self.mobilenet2 = nn.Sequential(*(mobilenet2.layers[i] for i in range(20)))
+        else:
+            def conv_bn(inp, oup, stride):
+                return nn.Sequential(
+                    nn.Conv2d(inp, oup, 3, stride, 1, bias=False),
+                    nn.BatchNorm2d(oup),
+                    nn.ReLU6(inplace=True)
+                )
+
+            self.mobilenet2 = nn.Sequential(
+                conv_bn(in_channels,  32, 2),
+                *(mobilenet2.layers[i] for i in range(1, 20))
+                )
+
+        self.fc_yaw = nn.Linear(1280, num_bins)
+        self.fc_pitch = nn.Linear(1280, num_bins)
+        self.fc_roll = nn.Linear(1280, num_bins)
+
+
+    def forward(self, x):
+        x = self.mobilenet2(x)
+        x = x.view(x.size(0), -1)
+        pre_yaw = self.fc_yaw(x)
+        pre_pitch = self.fc_pitch(x)
+        pre_roll = self.fc_roll(x)
+        return pre_yaw, pre_pitch, pre_roll

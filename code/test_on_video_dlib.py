@@ -49,8 +49,8 @@ if __name__ == '__main__':
     if not os.path.exists(out_dir):
         os.makedirs(out_dir)
 
-    if not os.path.exists(args.video_path):
-        sys.exit('Video does not exist')
+    #if not os.path.exists(args.video_path):
+    #    sys.exit('Video does not exist')
 
     # ResNet50 structure
     model = hopenet.Hopenet(torchvision.models.resnet.Bottleneck, [3, 4, 6, 3], 66)
@@ -80,11 +80,14 @@ if __name__ == '__main__':
     idx_tensor = [idx for idx in xrange(66)]
     idx_tensor = torch.FloatTensor(idx_tensor).cuda(gpu)
 
+    print(video_path)
     video = cv2.VideoCapture(video_path)
 
     # New cv2
     width = int(video.get(cv2.CAP_PROP_FRAME_WIDTH))   # float
     height = int(video.get(cv2.CAP_PROP_FRAME_HEIGHT)) # float
+
+    print(width, height)
 
     # Define the codec and create VideoWriter object
     fourcc = cv2.VideoWriter_fourcc(*'MJPG')
