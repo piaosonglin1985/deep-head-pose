@@ -1,0 +1,152 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%2345678901234567890123456789012345678901234567890123456789012345678901234567890
+%        1         2         3         4         5         6         7         8
+
+\documentclass[letterpaper, 10 pt, conference]{ieeeconf}  % Comment this line out if you need a4paper
+
+%\documentclass[a4paper, 10pt, conference]{ieeeconf}      % Use this line for a4 paper
+
+\IEEEoverridecommandlockouts                              % This command is only needed if 
+                                                          % you want to use the \thanks command
+
+\overrideIEEEmargins                                      % Needed to meet printer requirements.
+
+%In case you encounter the following error:
+%Error 1010 The PDF file may be corrupt (unable to open PDF file) OR
+%Error 1000 An error occurred while parsing a contents stream. Unable to analyze the PDF file.
+%This is a known problem with pdfLaTeX conversion filter. The file cannot be opened with acrobat reader
+%Please use one of the alternatives below to circumvent this error by uncommenting one or the other
+%\pdfobjcompresslevel=0
+%\pdfminorversion=4
+
+% See the \addtolength command later in the file to balance the column lengths
+% on the last page of the document
+
+% The following packages can be found on http:\\www.ctan.org
+%\usepackage{graphics} % for pdf, bitmapped graphics files
+%\usepackage{epsfig} % for postscript graphics files
+%\usepackage{mathptmx} % assumes new font selection scheme installed
+%\usepackage{times} % assumes new font selection scheme installed
+%\usepackage{amsmath} % assumes amsmath package installed
+%\usepackage{amssymb}  % assumes amsmath package installed
+\usepackage{graphicx}
+\usepackage[caption=false]{subfig}
+\usepackage{hyperref}
+
+\title{\LARGE \bf
+Report to head pose estimation using CNN
+}
+
+
+\author{Songlin Piao$^{1}$
+\thanks{$^{1}$Songlin Piao - 
+        {\tt\small piaosonglin1985@hotmail.com}}%
+}
+
+
+\begin{document}
+
+
+
+\maketitle
+\thispagestyle{empty}
+\pagestyle{empty}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{abstract}
+
+This is a technical report about head pose estimation. The baseline paper is from N. Ruiz et al.~\cite{Ruiz2017}. Authors use ResNet50~\cite{He2015} to build a CNN network for estimating head pose (roll, pitch and yaw) from 2D images. This report tried to describe all the possible solutions to improve this baseline method.
+
+\end{abstract}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Topic1}
+
+Authors build a so-called hopenet using ResNet50 as a backbone. They conducted the tests on the AFLW2000 dataset. The results are shown in the Table 1 in the paper ~\cite{Ruiz2017}. Through looking at the source code written by authors, it is found that authors used 66 bins in the range between -99$^\circ$ and 99$^\circ$.
+Following solutions could improve the accuracy, but they are not yet proved due to the limited time and training resources.
+
+\begin{itemize}
+	\item change the 66 bins to 99 bins and 132 bins
+	\item test with ResNet 101 and 152, but this may slow down the speed.
+\end{itemize}
+
+
+\section{Topic2}
+
+In order to make the algorithm satisfy the real time requirement, MobileNet is recommended. I have conducted a test with MobileNet V2. Please have a look at the file train\_mobilenet2.py. The new network is trained with exactly same hyper parameters mentioned in the paper~\cite{Ruiz2017}. It is trained for 25 epochs using Adam optimization with a learning rate of $0.00001$. The training time takes approximately 10.5 hours with GTX 1050Ti Laptop GPU.
+
+\begin{table}[h]
+	\caption{Error Comparison between ResNet50 and MobileNet V2 on the AFLW2000 dataset.}
+	\label{tb:table_error_compare}
+	\begin{center}
+		\begin{tabular}{|c|c|c|c|c|}
+			\hline
+			 & Yaw & Pitch & Roll & MAE \\
+			\hline
+			Multi-Loss ResNet50 ($\alpha = 1$) & 6.920 & 6.637 & 5.674 & 6.410 \\
+			\hline
+			Multi-Loss MobileNet-V2 ($\alpha = 1$) & 10.9175 & 7.1786 & 6.6814 &  8.259 \\
+			\hline
+		\end{tabular}
+	\end{center}
+\end{table}
+
+Table~\ref{tb:table_error_compare} shows error comparison of ResNet50 and MobileNet V2 on the AFLW2000 dataset. There is slight performance decrease in the case of MobileNet V2. As an opposite, MobileNet V2 has a faster inference speed and very small model size compared to ResNet50 as shown in Table~\ref{tb:table_compare2}.
+
+\begin{table}[h]
+	\caption{Speed and Model Size Comparison between ResNet50 and MobileNet V2.}
+	\label{tb:table_compare2}
+	\begin{center}
+		\begin{tabular}{|c|c|c|}
+			\hline
+			& inference time & model size \\
+			\hline
+			Multi-Loss ResNet50 ($\alpha = 1$) & 5.5845ms & 95.9Mb \\
+			\hline
+			Multi-Loss MobileNet-V2 ($\alpha = 1$) & 4.6118ms & 10.1Mb \\
+			\hline
+		\end{tabular}
+	\end{center}
+\end{table}
+
+\begin{figure}[ht]
+	\centering
+	\subfloat[]{\includegraphics[width=0.48\linewidth, height=3.75cm]{mobile1.jpg}} \hspace*{0.5cm} 
+	\subfloat[]{\includegraphics[width=0.48\linewidth, height=3.75cm]{hopenet1.jpg}} \\
+	\subfloat[]{\includegraphics[width=0.48\linewidth, height=3.75cm]{mobile2.jpg}} \hspace*{0.5cm}
+	\subfloat[]{\includegraphics[width=0.48\linewidth, height=3.75cm]{hopenet2.jpg}} \\
+	\subfloat[]{\includegraphics[width=0.48\linewidth, height=3.75cm]{mobile3.jpg}} \hspace*{0.5cm}
+	\subfloat[]{\includegraphics[width=0.48\linewidth, height=3.75cm]{hopenet3.jpg}} \\
+	\caption{The left column are the results from MobileNet V2 and the right column are the results from Hopenet.}
+	\label{fig:result_images}
+\end{figure}
+
+Fig.~\ref{fig:result_images} shows the visualization of the head pose estimation from MobileNet V2 and Hopenet. Although MobileNet V2 shows higher error in the Table 1, but
+it seems in the first two images, the results from MobileNet V2 make more sense than the results from Hopenet. This needs to be further investigated.
+
+\section{Further Improvements}
+
+So far, the input size 224x224 is used for training and testing. It is necessary to test with smaller input sizes such as 168x168 or 112x112.
+If the test results are not so bad, this would increase inference speed tremendously.
+
+\section{Newly Added Source Codes}
+\begin{itemize}
+	\item extract\_valid\_files.py is used for extracting valid samples so that all roll, pitch and yaw are between -99$^\circ$ and 99$^\circ$
+	\item mobilenetv2.py is the implementation of MobileNet V2.
+	\item train\_mobilenet2.py is the training script using MobileNet V2.
+	\item test\_mobilenet2.py is the evaluation script using MobileNet V2.
+	\item demo\_mobilenet2\_webcam.py is the demo program to estimate head pose from Webcam using MobileNet V2.
+	\item the implementation of MobileNet V2 based model is added inside the file hopenet.py.
+	\item MobileNet V1 is also implemented but not used yet.
+\end{itemize}
+
+In order to initialize the weights of MobileNet V2, the model mobilenetv2\_1.0-0c6065bc.pth from \url{https://github.com/d-li14/mobilenetv2.pytorch} is used.
+
+{\small
+	\bibliographystyle{IEEEtran}
+	\bibliography{library}
+}
+
+\end{document}

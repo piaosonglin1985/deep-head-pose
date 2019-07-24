@@ -3,7 +3,7 @@ import sys, os, argparse
 import numpy as np
 import cv2
 import matplotlib.pyplot as plt
-
+import time
 import torch
 import torch.nn as nn
 from torch.autograd import Variable
@@ -94,7 +94,7 @@ if __name__ == '__main__':
     yaw_error = .0
     pitch_error = .0
     roll_error = .0
-
+    global_time = .0
     l1loss = torch.nn.L1Loss(size_average=False)
 
     for i, (images, labels, cont_labels, name) in enumerate(test_loader):
@@ -105,7 +105,14 @@ if __name__ == '__main__':
         label_pitch = cont_labels[:,1].float()
         label_roll = cont_labels[:,2].float()
 
-        yaw, pitch, roll = model(images)
+        # compute output
+        end = time.time()
+        with torch.no_grad():
+            yaw, pitch, roll = model(images)
+        gpu_time = time.time() - end
+
+        global_time += gpu_time * 1000
+        print("gpu time is %f ms.\n" % (gpu_time * 1000))
 
         # Binned predictions
         _, yaw_bpred = torch.max(yaw.data, 1)
@@ -143,5 +150,5 @@ if __name__ == '__main__':
             cv2.imwrite(os.path.join('output/images', name + '.jpg'), cv2_img)
 
     print('Test error in degrees of the model on the ' + str(total) +
-    ' test images. Yaw: %.4f, Pitch: %.4f, Roll: %.4f' % (yaw_error / total,
-    pitch_error / total, roll_error / total))
+    ' test images. Yaw: %.4f, Pitch: %.4f, Roll: %.4f, Average time: %.4f' % (yaw_error / total,
+    pitch_error / total, roll_error / total, global_time / total))
